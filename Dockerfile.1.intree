@@ -1,0 +1,115 @@
+# qat-crypto-base
+
+ARG OS_VER=36
+ARG OS_IMAGE=fedora
+FROM ${OS_IMAGE}:${OS_VER} AS build
+
+RUN yum update -y && yum upgrade -y && yum install -y \
+    pciutils kmod procps-ng \
+    git gcc-c++ cmake \
+    make systemd-devel automake autoconf libtool nasm \
+    zlib-devel yasm perl
+
+ARG QATLIB_VER="22.07.1"
+ARG QATLIB_REPO="https://github.com/intel/qatlib.git"
+ARG QATENGINE_VER="v0.6.16"
+ARG QATENGINE_REPO="https://github.com/intel/QAT_Engine"
+ARG IPSEC_MB_VER="v1.3"
+ARG IPSEC_MB_REPO="https://github.com/intel/intel-ipsec-mb"
+ARG IPP_CRYPTO_VER="ippcp_2021.6"
+ARG IPP_CRYPTO_REPO="https://github.com/intel/ipp-crypto"
+
+ARG OPENSSL_INCLUDE_DIR="/usr/local/include/openssl"
+ARG OPENSSL_LIBRARIES_DIR="/usr/local/lib64"
+ARG OPENSSL_ROOT_DIR="/usr/local/bin/openssl"
+
+ARG OPENSSL_VER=1_1_1q
+ARG OPENSSL_REPO=https://github.com/openssl/openssl.git
+RUN git clone --depth 1 -b OpenSSL_${OPENSSL_VER} ${OPENSSL_REPO} openssl && \
+    cd openssl && \
+    ./config && \
+    make depend && \
+    make -j && \
+    make install
+
+RUN git clone --depth 1 -b ${QATLIB_VER} ${QATLIB_REPO} && \
+cd qatlib && \
+./autogen.sh && \
+./configure --prefix=/usr/local/ --enable-systemd=no && \
+make -j && \
+make install samples-install 
+
+RUN git clone --depth 1 -b ${IPP_CRYPTO_VER} ${IPP_CRYPTO_REPO} && \
+    cd /ipp-crypto/sources/ippcp/crypto_mb && \
+    cmake . -B"../build" \
+    -DOPENSSL_INCLUDE_DIR=${OPENSSL_INCLUDE_DIR} \
+    -DOPENSSL_LIBRARIES=${OPENSSL_LIBRARIES_DIR} \
+    -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} && \
+    cd ../build && \
+    make crypto_mb && make install
+
+RUN git clone --depth 1 -b ${IPSEC_MB_VER} ${IPSEC_MB_REPO} && \
+    cd /intel-ipsec-mb && \
+    make && make install LIB_INSTALL_DIR=/usr/local/lib64
+
+RUN git clone --depth 1 -b ${QATENGINE_VER} ${QATENGINE_REPO} && \
+    cd /QAT_Engine && \
+    ./autogen.sh && \
+    ./configure \
+    --with-qat_hw_dir=/usr/local/ \
+    --enable-qat_sw \
+    --enable-qat_hw_chachapoly && \
+    make && make install
+
+RUN dnf install -y dnf-utils && \
+    mkdir sourcecode && cd sourcecode && \
+    yumdownloader --source \
+    autoconf automake cmake dnf-utils gcc-c++ git kmod libtool make nasm pciutils perl procps-ng systemd-devel yasm zlib-devel \
+    annobin-docs annobin-plugin-gcc ansible-srpm-macros binutils binutils-gold cmake-data cmake-filesystem cmake-rpm-macros cpp \
+    dbus dbus-broker dbus-common dbus-libs device-mapper device-mapper-libs dnf-plugins-core dwz efi-srpm-macros elfutils-debuginfod-client \
+    emacs-filesystem file fonts-srpm-macros fpc-srpm-macros gc gcc gcc-plugin-annobin ghc-srpm-macros git-core git-core-doc glibc-devel glibc-gconv-extra \
+    glibc-headers-x86 gnat-srpm-macros go-srpm-macros groff-base guile22 hwdata jsoncpp kernel-headers kernel-srpm-macros kmod-libs less libargon2 libcbor \
+    libdatrie libedit libfdisk libfido2 libmpc libpkgconf libseccomp libstdc++-devel libthai libtool-ltdl libutempter libuv libxcrypt-devel lua-srpm-macros \
+    m4 ncurses nim-srpm-macros ocaml-srpm-macros openblas-srpm-macros openssh openssh-clients package-notes-srpm-macros pciutils-libs perl-Algorithm-Diff \
+    perl-Archive-Tar perl-Archive-Zip perl-Attribute-Handlers perl-AutoLoader perl-AutoSplit perl-B perl-Benchmark perl-CPAN perl-CPAN-Meta perl-CPAN-Meta-Requirements \
+    perl-CPAN-Meta-YAML perl-Carp perl-Class-Struct perl-Compress-Bzip2 perl-Compress-Raw-Bzip2 perl-Compress-Raw-Lzma perl-Compress-Raw-Zlib perl-Config-Extensions \
+    perl-Config-Perl-V perl-DBM_Filter perl-DB_File perl-Data-Dumper perl-Data-OptList perl-Data-Section perl-Devel-PPPort perl-Devel-Peek perl-Devel-SelfStubber \
+    perl-Devel-Size perl-Digest perl-Digest-MD5 perl-Digest-SHA perl-Digest-SHA1 perl-DirHandle perl-Dumpvalue perl-DynaLoader perl-Encode perl-Encode-devel \
+    perl-English perl-Env perl-Errno perl-Error perl-Exporter perl-ExtUtils-CBuilder perl-ExtUtils-Command perl-ExtUtils-Constant perl-ExtUtils-Embed perl-ExtUtils-Install \
+    perl-ExtUtils-MM-Utils perl-ExtUtils-MakeMaker perl-ExtUtils-Manifest perl-ExtUtils-Miniperl perl-ExtUtils-ParseXS perl-Fcntl perl-File-Basename perl-File-Compare \
+    perl-File-Copy perl-File-DosGlob perl-File-Fetch perl-File-Find perl-File-HomeDir perl-File-Path perl-File-Temp perl-File-Which perl-File-stat perl-FileCache perl-FileHandle \
+    perl-Filter perl-Filter-Simple perl-FindBin perl-GDBM_File perl-Getopt-Long perl-Getopt-Std perl-Git perl-HTTP-Tiny perl-Hash-Util perl-Hash-Util-FieldHash perl-I18N-Collate \
+    perl-I18N-LangTags perl-I18N-Langinfo perl-IO perl-IO-Compress perl-IO-Compress-Lzma perl-IO-Socket-IP perl-IO-Zlib perl-IPC-Cmd perl-IPC-Open3 perl-IPC-SysV perl-IPC-System-Simple \
+    perl-Importer perl-JSON-PP perl-Locale-Maketext perl-Locale-Maketext-Simple perl-MIME-Base64 perl-MIME-Charset perl-MRO-Compat perl-Math-BigInt perl-Math-BigInt-FastCalc \
+    perl-Math-BigRat perl-Math-Complex perl-Memoize perl-Module-Build perl-Module-CoreList perl-Module-CoreList-tools perl-Module-Load perl-Module-Load-Conditional \
+    perl-Module-Loaded perl-Module-Metadata perl-Module-Signature perl-NDBM_File perl-NEXT perl-Net perl-Net-Ping perl-Net-SSLeay perl-ODBM_File perl-Object-HashBase \
+    perl-Opcode perl-POSIX perl-Package-Generator perl-Params-Check perl-Params-Util perl-PathTools perl-Perl-OSType perl-PerlIO-via-QuotedPrint perl-Pod-Checker \
+    perl-Pod-Escapes perl-Pod-Functions perl-Pod-Html perl-Pod-Perldoc perl-Pod-Simple perl-Pod-Usage perl-Safe perl-Scalar-List-Utils perl-Search-Dict perl-SelectSaver \
+    perl-SelfLoader perl-Socket perl-Software-License perl-Storable perl-Sub-Exporter perl-Sub-Install perl-Symbol perl-Sys-Hostname perl-Sys-Syslog perl-Term-ANSIColor \
+    perl-Term-Cap perl-Term-Complete perl-Term-ReadLine perl-Term-Size-Perl perl-Term-Table perl-TermReadKey perl-Test perl-Test-Harness perl-Test-Simple perl-Text-Abbrev \
+    perl-Text-Balanced perl-Text-Diff perl-Text-Glob perl-Text-ParseWords perl-Text-Tabs+Wrap perl-Text-Template perl-Thread perl-Thread-Queue perl-Thread-Semaphore perl-Tie \
+    perl-Tie-File perl-Tie-Memoize perl-Tie-RefHash perl-Time perl-Time-HiRes perl-Time-Local perl-Time-Piece perl-URI perl-Unicode-Collate perl-Unicode-Normalize perl-Unicode-UCD \
+    perl-User-pwent perl-autodie perl-autouse perl-base perl-bignum perl-blib perl-constant perl-debugger perl-deprecate perl-devel perl-diagnostics perl-doc perl-encoding \
+    perl-encoding-warnings perl-experimental perl-fields perl-filetest perl-if perl-inc-latest perl-interpreter perl-less perl-lib perl-libnet perl-libnetcfg perl-libs perl-local-lib \
+    perl-locale perl-macros perl-meta-notation perl-mro perl-open perl-overload perl-overloading perl-parent perl-perlfaq perl-ph perl-podlators perl-sigtrap perl-sort perl-srpm-macros \
+    perl-subs perl-threads perl-threads-shared perl-utils perl-vars perl-version perl-vmsish pkgconf pkgconf-m4 pkgconf-pkg-config python-srpm-macros python3-dateutil python3-dbus \
+    python3-distro python3-dnf-plugins-core python3-pyparsing python3-six qt5-srpm-macros redhat-rpm-config rhash rpmautospec-rpm-macros rust-srpm-macros sombok systemd systemd-pam \
+    systemtap-sdt-devel unzip util-linux vim-filesystem xkeyboard-config zip cryptsetup-libs diffutils libbpf libxkbcommon perl-CPAN-DistnameInfo perl-Encode-Locale perl-IO-Socket-SSL \
+    perl-Mozilla-CA perl-Term-Size-Any perl-Unicode-LineBreak qrencode-libs systemd-networkd systemd-resolved
+
+FROM ${OS_IMAGE}:${OS_VER}
+COPY --from=build /usr/local /usr/local
+COPY --from=build /qatlib/LICENSE /usr/share/package-licenses/qatlib/LICENSE
+COPY --from=build /QAT_Engine/LICENSE /usr/share/package-licenses/QAT_Engine/LICENSE
+COPY --from=build /ipp-crypto/LICENSE /usr/share/package-licenses/ipp-crypto/LICENSE
+COPY --from=build /intel-ipsec-mb/LICENSE /usr/share/package-licenses/intel-ipsec-mb/LICENSE
+COPY --from=build /sourcecode /sourcecode
+
+RUN echo "/usr/lib/" >> /etc/ld.so.conf.d/all-libs.conf && ldconfig && \
+    echo "/usr/lib64/" >> /etc/ld.so.conf.d/all-libs.conf && ldconfig && \
+    echo "/usr/local/lib/" >> /etc/ld.so.conf.d/all-libs.conf && ldconfig && \
+    echo "/usr/local/lib64" >> /etc/ld.so.conf.d/all-libs.conf && ldconfig
+
+ENV  OPENSSL_ENGINES=/usr/local/lib64/engines-1.1
+ENV  PATH="$PATH:/usr/local/ssl/bin"
+COPY run_qat-crypto-base_test.sh /usr/local/bin/
